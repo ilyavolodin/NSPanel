@@ -50,6 +50,12 @@ api:
 button:
   - platform: restart
     name: Restart $device_name
+    device_class: restart
+  - platform: template
+    name: $device_name TFT Upload
+    device_class: update
+    on_press:
+      - lambda: 'id(disp1).upload_tft();'
 
 # Define some inputs
 binary_sensor:
@@ -172,6 +178,7 @@ binary_sensor:
     page_id: 0
     component_id: 9
     on_release:
+      then:
         - if:
             condition:
               lambda: 'return id(current_mode).state == "fanActive";'
@@ -191,14 +198,54 @@ binary_sensor:
                     hvac_mode: fan_only
     
   - platform: nextion
-    name: $device_name Vertical Vane Button
+    name: $device_name Fan Speed Button
     page_id: 0
     component_id: 10
+    on_release:
+      then:
+        - rtttl.play: "twobits:d=4,o=0,b=6000:a0"
+        - homeassistant.service:
+            service: climate.set_fan_mode
+            data:
+              entity_id: $target_thermostat
+              fan_mode: !lambda |-
+                if (id(fan_speed).state == "1") {
+                  return "2";
+                } else if (id(fan_speed).state == "2") {
+                  return "3";
+                } else if (id(fan_speed).state == "3") {
+                  return "4";
+                } else if (id(fan_speed).state == "4") {
+                  return "AUTO";
+                } else {
+                  return "1";
+                }
     
   - platform: nextion
     name: $device_name Horizontal Vane Button
     page_id: 0
     component_id: 11
+    on_release:
+      then:
+        - rtttl.play: "twobits:d=4,o=0,b=6000:a0"
+        - homeassistant.service:
+            service: climate.set_swing_mode
+            data:
+              entity_id: $target_thermostat
+              swing_mode: !lambda |-
+                if (id(horizontal_vane).state == "1") {
+                  return "2";
+                } else if (id(horizontal_vane).state == "2") {
+                  return "3";
+                } else if (id(horizontal_vane).state == "3") {
+                  return "4";
+                } else if (id(horizontal_vane).state == "4") {
+                  return "5";
+                } else if (id(horizontal_vane).state == "5") {
+                  return "AUTO";
+                } else {
+                  return "1";
+                }
 
 sensor:
   - platform: wifi_signal
@@ -278,6 +325,73 @@ text_sensor:
               - lambda: 'id(disp1).send_command_printf("vis fanActive,0");'
               - lambda: 'id(disp1).send_command_printf("vis %s,1", x.c_str());'
               - lambda: 'id(disp1).set_component_text_printf("targetTemp", "%i""\xb0", (int)id(target_temperature).state);'
+  - platform: homeassistant
+    id: horizontal_vane
+    entity_id: $target_thermostat
+    attribute: swing_mode
+    filters:
+      - map:
+        - 1 -> 1
+        - 2 -> 2
+        - 3 -> 3
+        - 4 -> 4
+        - 5 -> 5
+        - AUTO -> 6
+        - SWING -> 6
+    on_value:
+      then:
+        - lambda: !lambda |-
+            if (x == "1") {
+              id(disp1).send_command_printf("hVane.pic=6");
+              id(disp1).send_command_printf("hVane.pic2=6");
+            } else if (x == "2") {
+              id(disp1).send_command_printf("hVane.pic=7");
+              id(disp1).send_command_printf("hVane.pic2=7");
+            } else if (x == "3") {
+              id(disp1).send_command_printf("hVane.pic=8");
+              id(disp1).send_command_printf("hVane.pic2=8");
+            } else if (x == "4") {
+              id(disp1).send_command_printf("hVane.pic=9");
+              id(disp1).send_command_printf("hVane.pic2=9");
+            } else if (x == "5") {
+              id(disp1).send_command_printf("hVane.pic=10");
+              id(disp1).send_command_printf("hVane.pic2=10");
+            } else if (x == "6") {
+              id(disp1).send_command_printf("hVane.pic=11");
+              id(disp1).send_command_printf("hVane.pic2=11");
+            }
+
+  - platform: homeassistant
+    id: fan_speed
+    entity_id: $target_thermostat
+    attribute: fan_mode
+    filters:
+      - map:
+        - 1 -> 1
+        - 2 -> 2
+        - 3 -> 3
+        - 4 -> 4
+        - AUTO -> 5
+        - QUIET -> 5
+    on_value:
+      then:
+        - lambda: !lambda |-
+            if (x == "1") {
+              id(disp1).send_command_printf("fanSpeed.pic=16");
+              id(disp1).send_command_printf("fanSpeed.pic2=16");
+            } else if (x == "2") {
+              id(disp1).send_command_printf("fanSpeed.pic=17");
+              id(disp1).send_command_printf("fanSpeed.pic2=17");
+            } else if (x == "3") {
+              id(disp1).send_command_printf("fanSpeed.pic=18");
+              id(disp1).send_command_printf("fanSpeed.pic2=18");
+            } else if (x == "4") {
+              id(disp1).send_command_printf("fanSpeed.pic=19");
+              id(disp1).send_command_printf("fanSpeed.pic2=19");
+            } else if (x == "5") {
+              id(disp1).send_command_printf("fanSpeed.pic=20");
+              id(disp1).send_command_printf("fanSpeed.pic2=20");
+            }
 
 # Define some outputs
 switch:
@@ -288,9 +402,9 @@ switch:
     pin:
       number: 22
     on_turn_on:
-      - lambda: 'id(disp1).send_command_printf("leftButton.pic=19");'
+      - lambda: 'id(disp1).send_command_printf("leftButton.pic=13");'
     on_turn_off:
-      - lambda: 'id(disp1).send_command_printf("leftButton.pic=21");'
+      - lambda: 'id(disp1).send_command_printf("leftButton.pic=15");'
 
   - platform: gpio
     name: $device_name Relay 2
@@ -298,9 +412,9 @@ switch:
     pin:
       number: 19
     on_turn_on:
-      - lambda: 'id(disp1).send_command_printf("rightButton.pic=19");'
+      - lambda: 'id(disp1).send_command_printf("rightButton.pic=13");'
     on_turn_off:
-      - lambda: 'id(disp1).send_command_printf("rightButton.pic=21");'
+      - lambda: 'id(disp1).send_command_printf("rightButton.pic=15");'
 
   # Pin 4 always needs to be on to power up the display
   - platform: gpio
@@ -349,13 +463,74 @@ display:
   - platform: nextion
     id: disp1
     uart_id: tf_uart
-    tft_url: http://192.168.1.150:8123/local/nspanel_demo.tft
-    # A little fun...
-    on_setup:
+    tft_url: http://192.168.1.150:8123/local/NSPanel.tft
+    auto_wake_on_touch: true
+    lambda: |-
+      if (id(current_mode).state == "0") {
+        id(disp1).set_component_text_printf("targetTemp", "--""\xb0");
+        id(disp1).send_command_printf("vis heatActive,0");
+        id(disp1).send_command_printf("vis coolActive,0");
+        id(disp1).send_command_printf("vis dryActive,0");
+        id(disp1).send_command_printf("vis fanActive,0");
+      } else {
+        id(disp1).set_component_text_printf("targetTemp", "%i""\xb0", (int)id(target_temperature).state);
+        id(disp1).send_command_printf("vis heatActive,0");
+        id(disp1).send_command_printf("vis coolActive,0");
+        id(disp1).send_command_printf("vis dryActive,0");
+        id(disp1).send_command_printf("vis fanActive,0");
+        id(disp1).send_command_printf("vis %s,1", id(current_mode).state.c_str());
+      }
+      id(disp1).set_component_text_printf("currentTemp", "%i""\xb0", (int)id(current_temperature).state);
+      if (id(relay_1).state == 1) {
+        id(disp1).send_command_printf("leftButton.pic=13");
+      } else {
+        id(disp1).send_command_printf("leftButton.pic=15");
+      }
+      if (id(relay_2).state == 1) {
+        id(disp1).send_command_printf("rightButton.pic=13");
+      } else {
+        id(disp1).send_command_printf("rightButton.pic=15");
+      }
+      if (id(horizontal_vane).state == "1") {
+        id(disp1).send_command_printf("hVane.pic=6");
+        id(disp1).send_command_printf("hVane.pic2=6");
+      } else if (id(horizontal_vane).state == "2") {
+        id(disp1).send_command_printf("hVane.pic=7");
+        id(disp1).send_command_printf("hVane.pic2=7");
+      } else if (id(horizontal_vane).state == "3") {
+        id(disp1).send_command_printf("hVane.pic=8");
+        id(disp1).send_command_printf("hVane.pic2=8");
+      } else if (id(horizontal_vane).state == "4") {
+        id(disp1).send_command_printf("hVane.pic=9");
+        id(disp1).send_command_printf("hVane.pic2=9");
+      } else if (id(horizontal_vane).state == "5") {
+        id(disp1).send_command_printf("hVane.pic=10");
+        id(disp1).send_command_printf("hVane.pic2=10");
+      } else if (id(horizontal_vane).state == "6") {
+        id(disp1).send_command_printf("hVane.pic=11");
+        id(disp1).send_command_printf("hVane.pic2=11");
+      }
+      if (id(fan_speed).state == "1") {
+        id(disp1).send_command_printf("fanSpeed.pic=16");
+        id(disp1).send_command_printf("fanSpeed.pic2=16");
+      } else if (id(fan_speed).state == "2") {
+        id(disp1).send_command_printf("fanSpeed.pic=17");
+        id(disp1).send_command_printf("fanSpeed.pic2=17");
+      } else if (id(fan_speed).state == "3") {
+        id(disp1).send_command_printf("fanSpeed.pic=18");
+        id(disp1).send_command_printf("fanSpeed.pic2=18");
+      } else if (id(fan_speed).state == "4") {
+        id(disp1).send_command_printf("fanSpeed.pic=19");
+        id(disp1).send_command_printf("fanSpeed.pic2=19");
+      } else if (id(fan_speed).state == "5") {
+        id(disp1).send_command_printf("fanSpeed.pic=20");
+        id(disp1).send_command_printf("fanSpeed.pic2=20");
+      }
+    on_wake:
       then:
         - number.set:
             id: brightness
-            value: 30
+            value: 85
         - lambda: |-
             if (id(current_mode).state == "0") {
               id(disp1).set_component_text_printf("targetTemp", "--""\xb0");
@@ -373,14 +548,113 @@ display:
             }
             id(disp1).set_component_text_printf("currentTemp", "%i""\xb0", (int)id(current_temperature).state);
             if (id(relay_1).state == 1) {
-              id(disp1).send_command_printf("leftButton.pic=19");
+              id(disp1).send_command_printf("leftButton.pic=13");
             } else {
-              id(disp1).send_command_printf("leftButton.pic=21");
+              id(disp1).send_command_printf("leftButton.pic=15");
             }
             if (id(relay_2).state == 1) {
-              id(disp1).send_command_printf("rightButton.pic=19");
+              id(disp1).send_command_printf("rightButton.pic=13");
             } else {
-              id(disp1).send_command_printf("rightButton.pic=21");
+              id(disp1).send_command_printf("rightButton.pic=15");
             }
-            
-        # - rtttl.play: "twobits:d=4,o=5,b=220:c6,8g,8g,a,g,p,b,c6"
+            if (id(horizontal_vane).state == "1") {
+              id(disp1).send_command_printf("hVane.pic=6");
+              id(disp1).send_command_printf("hVane.pic2=6");
+            } else if (id(horizontal_vane).state == "2") {
+              id(disp1).send_command_printf("hVane.pic=7");
+              id(disp1).send_command_printf("hVane.pic2=7");
+            } else if (id(horizontal_vane).state == "3") {
+              id(disp1).send_command_printf("hVane.pic=8");
+              id(disp1).send_command_printf("hVane.pic2=8");
+            } else if (id(horizontal_vane).state == "4") {
+              id(disp1).send_command_printf("hVane.pic=9");
+              id(disp1).send_command_printf("hVane.pic2=9");
+            } else if (id(horizontal_vane).state == "5") {
+              id(disp1).send_command_printf("hVane.pic=10");
+              id(disp1).send_command_printf("hVane.pic2=10");
+            } else if (id(horizontal_vane).state == "6") {
+              id(disp1).send_command_printf("hVane.pic=11");
+              id(disp1).send_command_printf("hVane.pic2=11");
+            }
+            if (id(fan_speed).state == "1") {
+              id(disp1).send_command_printf("fanSpeed.pic=16");
+              id(disp1).send_command_printf("fanSpeed.pic2=16");
+            } else if (id(fan_speed).state == "2") {
+              id(disp1).send_command_printf("fanSpeed.pic=17");
+              id(disp1).send_command_printf("fanSpeed.pic2=17");
+            } else if (id(fan_speed).state == "3") {
+              id(disp1).send_command_printf("fanSpeed.pic=18");
+              id(disp1).send_command_printf("fanSpeed.pic2=18");
+            } else if (id(fan_speed).state == "4") {
+              id(disp1).send_command_printf("fanSpeed.pic=19");
+              id(disp1).send_command_printf("fanSpeed.pic2=19");
+            } else if (id(fan_speed).state == "5") {
+              id(disp1).send_command_printf("fanSpeed.pic=20");
+              id(disp1).send_command_printf("fanSpeed.pic2=20");
+            }
+    on_setup:
+      then:
+        - number.set:
+            id: brightness
+            value: 85
+        - lambda: |-
+            if (id(current_mode).state == "0") {
+              id(disp1).set_component_text_printf("targetTemp", "--""\xb0");
+              id(disp1).send_command_printf("vis heatActive,0");
+              id(disp1).send_command_printf("vis coolActive,0");
+              id(disp1).send_command_printf("vis dryActive,0");
+              id(disp1).send_command_printf("vis fanActive,0");
+            } else {
+              id(disp1).set_component_text_printf("targetTemp", "%i""\xb0", (int)id(target_temperature).state);
+              id(disp1).send_command_printf("vis heatActive,0");
+              id(disp1).send_command_printf("vis coolActive,0");
+              id(disp1).send_command_printf("vis dryActive,0");
+              id(disp1).send_command_printf("vis fanActive,0");
+              id(disp1).send_command_printf("vis %s,1", id(current_mode).state.c_str());
+            }
+            id(disp1).set_component_text_printf("currentTemp", "%i""\xb0", (int)id(current_temperature).state);
+            if (id(relay_1).state == 1) {
+              id(disp1).send_command_printf("leftButton.pic=13");
+            } else {
+              id(disp1).send_command_printf("leftButton.pic=15");
+            }
+            if (id(relay_2).state == 1) {
+              id(disp1).send_command_printf("rightButton.pic=13");
+            } else {
+              id(disp1).send_command_printf("rightButton.pic=15");
+            }
+            if (id(horizontal_vane).state == "1") {
+              id(disp1).send_command_printf("hVane.pic=6");
+              id(disp1).send_command_printf("hVane.pic2=6");
+            } else if (id(horizontal_vane).state == "2") {
+              id(disp1).send_command_printf("hVane.pic=7");
+              id(disp1).send_command_printf("hVane.pic2=7");
+            } else if (id(horizontal_vane).state == "3") {
+              id(disp1).send_command_printf("hVane.pic=8");
+              id(disp1).send_command_printf("hVane.pic2=8");
+            } else if (id(horizontal_vane).state == "4") {
+              id(disp1).send_command_printf("hVane.pic=9");
+              id(disp1).send_command_printf("hVane.pic2=9");
+            } else if (id(horizontal_vane).state == "5") {
+              id(disp1).send_command_printf("hVane.pic=10");
+              id(disp1).send_command_printf("hVane.pic2=10");
+            } else if (id(horizontal_vane).state == "6") {
+              id(disp1).send_command_printf("hVane.pic=11");
+              id(disp1).send_command_printf("hVane.pic2=11");
+            }
+            if (id(fan_speed).state == "1") {
+              id(disp1).send_command_printf("fanSpeed.pic=16");
+              id(disp1).send_command_printf("fanSpeed.pic2=16");
+            } else if (id(fan_speed).state == "2") {
+              id(disp1).send_command_printf("fanSpeed.pic=17");
+              id(disp1).send_command_printf("fanSpeed.pic2=17");
+            } else if (id(fan_speed).state == "3") {
+              id(disp1).send_command_printf("fanSpeed.pic=18");
+              id(disp1).send_command_printf("fanSpeed.pic2=18");
+            } else if (id(fan_speed).state == "4") {
+              id(disp1).send_command_printf("fanSpeed.pic=19");
+              id(disp1).send_command_printf("fanSpeed.pic2=19");
+            } else if (id(fan_speed).state == "5") {
+              id(disp1).send_command_printf("fanSpeed.pic=20");
+              id(disp1).send_command_printf("fanSpeed.pic2=20");
+            }
