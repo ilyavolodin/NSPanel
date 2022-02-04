@@ -3,6 +3,15 @@ substitutions:
   node_name: nspanel-guest-bedroom
   device_name: Guest Bedroom Switch
   target_thermostat: climate.guest_bedroom_minisplit
+  target_lights: light.office_lights
+  
+globals:
+  - id: selected_color_red
+    type: String
+  - id: selected_color_green
+    type: String
+  - id: selected_color_blue
+    type: String
 
 external_components:
   - source: github://pr#2956
@@ -254,13 +263,13 @@ binary_sensor:
   - platform: nextion
     name: $device_name Brightness Slider
     page_id: 1
-    component_id: 6
+    component_id: 4
     internal: true
     on_release:
       then:
         - lambda: !lambda |-
             id(brightness_value).update();
-            
+  
   - platform: nextion
     name: $device_name Color Wheel
     page_id: 1
@@ -268,15 +277,72 @@ binary_sensor:
     internal: true
     on_release:
       then:
-        - lambda: !lambda |-
+        - lambda: |-
             id(color_wheel_x).update();
             id(color_wheel_y).update();
-        - delay: 100ms
+        - delay: 20ms
+        - lambda: |-
+            RgbColor color = posToColor(id(color_wheel_x).state, id(color_wheel_y).state);
+            id(selected_color_red) = String(color.r);
+            id(selected_color_green) = String(color.g);
+            id(selected_color_blue) = String(color.b);
+        - homeassistant.service:
+            service: script.set_light_rgb
+            data:
+              light_name: $target_lights
+              red: !lambda 'return id(selected_color_red).c_str();'
+              green: !lambda 'return id(selected_color_green).c_str();'
+              blue: !lambda 'return id(selected_color_blue).c_str();'
+              
+  - platform: nextion
+    name: $device_name Color Temp Slider
+    page_id: 1
+    component_id: 14
+    internal: true
+    on_release:
+      then:
         - lambda: !lambda |-
-            RgbColor rgb = posToColor(id(color_wheel_x).state, id(color_wheel_y).state);
-            ESP_LOGD("custom", "R: %i", rgb.r);
-            ESP_LOGD("custom", "G: %i", rgb.g);
-            ESP_LOGD("custom", "B: %i", rgb.b);
+            id(color_temp_value).update();
+
+  - platform: nextion
+    name: $device_name Prev Page 1
+    page_id: 0
+    component_id: 21
+    internal: true
+    on_release:
+      then:
+        - delay: 20ms
+        - script.execute: refresh
+    
+  - platform: nextion
+    name: $device_name Next Page 1
+    page_id: 0
+    component_id: 22
+    internal: true
+    on_release:
+      then:
+        - delay: 20ms
+        - script.execute: refresh
+    
+  - platform: nextion
+    name: $device_name Prev Page 2
+    page_id: 1
+    component_id: 20
+    internal: true
+    on_release:
+      then:
+        - delay: 20ms
+        - script.execute: refresh
+    
+  - platform: nextion
+    name: $device_name Next Page 2
+    page_id: 1
+    component_id: 19
+    internal: true
+    on_release:
+      then:
+        - delay: 20ms
+        - script.execute: refresh
 
 sensor:
   - platform: wifi_signal
@@ -326,36 +392,55 @@ sensor:
       then:
         - lambda: 'id(disp1).set_component_text_printf("currentTemp", "%i""\xb0", (int)x);'
         
+  - platform: homeassistant
+    id: current_brightness
+    entity_id: $target_lights
+    attribute: brightness
+    on_value:
+      then:
+        - lambda: 'id(disp1).send_command_printf("brightnessVal.val=%i", (int)x);'
+        
+  - platform: homeassistant
+    id: current_color_temp
+    entity_id: $target_lights
+    attribute: color_temp
+    on_value:
+      then:
+        - lambda: 'id(disp1).send_command_printf("tempSlider.val=%i", (int)x);'
+        
   - platform: nextion
     id: brightness_value
     component_name: brightnessVal
     on_value:
       then:
-        - logger.log:
-            format: "Updated brightness value to %i"
-            args: ['(int)x']
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: $target_lights
+              brightness: !lambda 'return (int)x;'
             
+  - platform: nextion
+    id: color_temp_value
+    component_name: tempSlider
+    on_value:
+      then:
+        - homeassistant.service:
+            service: light.turn_on
+            data:
+              entity_id: $target_lights
+              color_temp: !lambda 'return (int)x;'
+
   - platform: nextion
     id: color_wheel_x
     component_name: selectedColorX
     filters:
       - offset: -54
-    on_value:
-      then:
-        - logger.log:
-            format: "Updated Color Wheel X Press value to %i"
-            args: ['(int)x']
             
   - platform: nextion
     id: color_wheel_y
     component_name: selectedColorY
     filters:
       - offset: -215
-    on_value:
-      then:
-        - logger.log:
-            format: "Updated Color Wheel Y Press value to %i"
-            args: ['(int)x']
 
 text_sensor:
   - platform: homeassistant
@@ -454,6 +539,7 @@ text_sensor:
               id(disp1).send_command_printf("fanSpeed.pic=20");
               id(disp1).send_command_printf("fanSpeed.pic2=20");
             }
+        
 
 # Define some outputs
 switch:
@@ -565,6 +651,8 @@ script:
             id(disp1).send_command_printf("fanSpeed.pic=20");
             id(disp1).send_command_printf("fanSpeed.pic2=20");
           }
+          id(disp1).send_command_printf("brightnessVal.val=%i", (int)id(current_brightness).state);
+          id(disp1).send_command_printf("tempSlider.val=%i", (int)id(current_color_temp).state);
 
 # Configure the internal bleeper
 output:
@@ -592,6 +680,7 @@ display:
     uart_id: tf_uart
     tft_url: http://192.168.1.150:8123/local/NSPanel.tft
     auto_wake_on_touch: true
+    update_interval: 2s
     on_wake:
       then:
         - number.set:
